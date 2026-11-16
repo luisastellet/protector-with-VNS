@@ -1,92 +1,103 @@
-# Police Route Optimization: Extending GRASP with Variable Neighborhood Search (VNS)
+# Otimização de Rotas de Patrulha Policial: GRASP estendido com VNS
 
-Esta implementação consiste em uma extensão e melhoria sobre o trabalho original apresentado no artigo [Optimizing Preventive Police Patrol Routes in Brazilian Cities Using a GRASP-Based Routing Heuristic](https://journals-sol.sbc.org.br/index.php/jisa/article/view/6805), cujo repositório base pode ser acessado em https://github.com/UFFeScience/protector. O projeto foi desenvolvido no âmbito da disciplina de **Pesquisa Operacional**.
-
----
-
-## Contexto e Justificativa da Contribuição
-
-Em problemas de roteamento para rondas de viaturas (*Police Patrol Routing Problem*), abordagens clássicas baseadas puramente em GRASP utilizam uma fase construtiva gulosa-aleatória seguida de uma busca local estática (como o operador 2-opt simples). Embora eficientes para encontrar soluções iniciais rápidas, esses métodos frequentemente estagnam em **mínimos locais**, especialmente em instâncias de alta densidade urbana com grafos complexos e múltiplos pontos de interesse crítico.
-
-### O que foi alterado e qual a contribuição?
-1. **Mecanismo de Vizinhança Múltipla (VNS):** Em vez de aplicar uma única rotina de busca local estática como no trabalho original, o algoritmo agora alterna sistematicamente entre diferentes estruturas de vizinhança ($N_k, k = 1, \dots, k_{max}$):
-   * **$N_1$ (Swap):** Troca a ordem de dois pontos de patrulha na rota.
-   * **$N_2$ (Relocate / Reinsertion):** Realoca um setor crítico de um ponto para outro da rota da viatura.
-   * **$N_3$ (2-opt Inter-segment):** Inverte uma subsequência de nós para desfazer cruzamentos de rotas.
-2. **Estratégia de Escape de Mínimos Locais (*Shake*):** Quando a busca local esgota a exploração de uma vizinhança sem ganho de aptidão, o operador de perturbação altera estocasticamente a solução atual com base no parâmetro $k$, permitindo explorar novas regiões promissoras do espaço de busca sem perder a viabilidade da rota.
+Este projeto estende o trabalho [Optimizing Preventive Police Patrol Routes in Brazilian Cities Using a GRASP-Based Routing Heuristic](https://journals-sol.sbc.org.br/index.php/jisa/article/view/6805), cujo repositório base está em https://github.com/UFFeScience/protector. Foi desenvolvido na disciplina de **Pesquisa Operacional** (UFF).
 
 ---
 
-## Estrutura do Repositório
+## Contexto e contribuição
 
-- `model.py`: Definição do grafo viário, matriz de custos/distâncias e cálculo da função objetivo (cobertura de criticidade vs. custo de deslocamento).
-- `grasp_vns.py`: Implementação do algoritmo híbrido (Construção Gulosa-Aleatória + VNS com múltiplas estruturas de vizinhança).
-- `main.py`: Script de execução com instâncias de exemplo e logs de convergência.
+Em problemas de roteamento de rondas de viaturas (*Police Patrol Routing Problem*), o GRASP combina uma construção gulosa-aleatória com uma busca local. Esse esquema gera boas soluções rapidamente, mas cada reinício é independente e a busca local tende a parar em **ótimos locais**, principalmente em grafos urbanos densos com muitos pontos críticos.
 
-## Como Executar
+### O que foi adicionado
 
-Certifique-se de ter o Python instalado!
+1. **VNS (*Variable Neighborhood Search*):** uma nova metaheurística, `vns_heuristic`, em `src/metaheuristic.rs`. Em vez de reiniciar a construção a cada iteração, ela parte de uma única solução inicial (construída e melhorada pela busca local) e a refina de forma iterativa.
+2. **Operador de perturbação (*shake*):** dado o nível de vizinhança `k` (de 1 a `k_max = 3`), o `shake` perturba a solução corrente inserindo até `k` laços (`add_loop`) em rotas escolhidas aleatoriamente (zonais, globais e VIP). Quanto maior o `k`, mais forte a perturbação.
+3. **Busca local reaproveitada:** após cada perturbação, aplica-se a mesma busca local do GRASP, com as vizinhanças `ExpandRoute`, `AddLoop` e `RepositionUnit`, que podem ser habilitadas individualmente.
 
-Para facilitar a execução de todo o projeto (Rust + Python), utilize o Makefile incluído na raiz do repositório.
+### Lógica de aceitação
 
-1. Configuração Inicial
-Instala as dependências do Python e verifica o ambiente Rust/Cargo:
-
-```Bash
-make setup
+```
+current ← construção + busca local
+best ← current
+enquanto não atingir o critério de parada:
+    k ← 1
+    enquanto k ≤ k_max:
+        candidate ← shake(cópia de current, k)
+        candidate ← busca_local(candidate)
+        se score(candidate) > score(current):
+            current ← candidate
+            atualiza best, se for o caso
+            k ← 1
+        senão:
+            k ← k + 1
 ```
 
-2. Compilar o Projeto
-Compila o motor de otimização em Rust no modo de liberação (release) para máxima performance:
+Se o candidato melhora a solução corrente, a busca volta à perturbação mais fraca (`k = 1`). Caso contrário, a perturbação é intensificada (`k + 1`).
 
-```Bash
-make build
-```
+---
 
-3. Execução das Heurísticas para Coleta de Métricas
-Você pode executar cada abordagem isoladamente ou rodar todas em sequência para gerar os dados comparativos:
+## Heurísticas disponíveis
 
-- Rodar apenas o GRASP Tradicional:
+| Comando | Heurística |
+|---|---|
+| `make run-greedy` | Construção gulosa (One-Greedy) |
+| `make run-grasp` | GRASP multi-start tradicional |
+| `make run-dm` | DM-GRASP (com mineração de dados) |
+| `make run-vns` | VNS (GRASP estendido com *shake*) |
+| `make run-all` | Todas as heurísticas em sequência |
 
-```Bash
-make run-grasp
-```
+---
 
-- Rodar apenas o DM-Grasp (com Mineração de Dados):
+## Estrutura do repositório
 
-```Bash
-make run-dm
-```
+- `src/metaheuristic.rs`: `multistart_grasp`, `vns_heuristic`, `dm_grasp`, `one_greedy_construction` e `shake`.
+- `src/solution/mod.rs`: representação da solução (rotas VIP, zonais, globais, unidades fixas, cobertura e score).
+- `src/solution/local_search/`: busca local e seus movimentos (`section_moves`, `loop_move`, `reposition_unit`).
+- `src/run.rs`: execução das heurísticas e exportação dos resultados.
+- `Makefile`: automação de compilação e execução.
 
-- Rodar apenas a nova abordagem VNS / VND híbrida:
+---
 
-```Bash
-make run-vns
-```
+## Como executar
 
-- Rodar o algoritmo guloso
+Pré-requisitos: **Rust/Cargo** e **Python 3**.
 
-```Bash
-make run-greedy
-```
+1. **Configuração inicial** (dependências Python e verificação do ambiente Rust):
 
-- Rodar todas as três heurísticas em sequência de uma só vez:
+   ```bash
+   make setup
+   ```
 
-```Bash
-make run-all
-````
+2. **Compilar** (modo release):
 
-1. Executar o Script Auxiliar em Python
+   ```bash
+   make build
+   ```
 
-```Bash
-make run-py
-````
+3. **Executar as heurísticas** (isoladamente ou todas de uma vez):
 
-5. Limpar Arquivos Temporários
-Remove artefatos de compilação, caches e logs gerados:
+   ```bash
+   make run-greedy   # guloso
+   make run-grasp    # GRASP tradicional
+   make run-dm       # DM-GRASP
+   make run-vns      # VNS
+   make run-all      # todas em sequência
+   ```
 
-```Bash
-make clean
-```
+4. **Script auxiliar em Python**:
 
-O sistema conta com um módulo de rastreamento de desempenho que registra o histórico de iterações, os melhores custos de solução encontrados e o tempo de execução decorrido, salvando-os em um arquivo `convergence_log.csv` para avaliação e geração de gráficos no seu relatório.
+   ```bash
+   make run-py
+   ```
+
+5. **Limpar arquivos temporários** (artefatos de compilação, caches e logs):
+
+   ```bash
+   make clean
+   ```
+
+---
+
+## Coleta de métricas
+
+O módulo de rastreamento registra o histórico de iterações, o melhor custo encontrado e o tempo decorrido, salvando tudo em `convergence_log.csv`. Esse arquivo serve de base para os gráficos de convergência do relatório.

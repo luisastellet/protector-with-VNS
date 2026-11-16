@@ -1,131 +1,92 @@
-# Routing of Police Vehicles in Large Urban Centers (RVP-Urb)
+# Police Route Optimization: Extending GRASP with Variable Neighborhood Search (VNS)
 
-This project provides tools to support **preventive police patrol planning** through optimization and heuristic techniques.
-The goal is to improve the allocation and routing of police patrol units in urban environments by maximizing coverage of crime hotspots while respecting operational constraints such as route length, available vehicles, and territorial zones.
-
-The project is inspired by research on the **Routing of Police Vehicles in Large Urban Centers (RVP-Urb)** problem and implements heuristic-based approaches to generate effective patrol routes.
+Esta implementação consiste em uma extensão e melhoria sobre o trabalho original apresentado no artigo [Optimizing Preventive Police Patrol Routes in Brazilian Cities Using a GRASP-Based Routing Heuristic](https://journals-sol.sbc.org.br/index.php/jisa/article/view/6805), cujo repositório base pode ser acessado em https://github.com/UFFeScience/protector. O projeto foi desenvolvido no âmbito da disciplina de **Pesquisa Operacional**.
 
 ---
 
-## Problem Overview
+## Contexto e Justificativa da Contribuição
 
-Urban crime prevention is a major challenge for large cities. Police departments typically have **limited patrol resources** (vehicles and officers) compared to the size and complexity of the urban environment.
+Em problemas de roteamento para rondas de viaturas (*Police Patrol Routing Problem*), abordagens clássicas baseadas puramente em GRASP utilizam uma fase construtiva gulosa-aleatória seguida de uma busca local estática (como o operador 2-opt simples). Embora eficientes para encontrar soluções iniciais rápidas, esses métodos frequentemente estagnam em **mínimos locais**, especialmente em instâncias de alta densidade urbana com grafos complexos e múltiplos pontos de interesse crítico.
 
-A common preventive strategy is **patrolling areas with higher crime probability**, often called **crime hotspots**. However, defining patrol routes manually is difficult because it must consider:
-
-- Crime distribution across the city
-- Limited number of patrol units
-- Maximum allowed patrol distance
-- Mandatory locations (e.g., schools, banks)
-- Territorial divisions used by police operations
-
-The **RVP-Urb problem** models the city as a **graph**, where:
-
-- **Vertices** represent street intersections or relevant locations
-- **Edges** represent street segments
-- Each edge has attributes such as:
-  - crime index
-  - length
-  - traffic direction
-
-The objective is to **maximize the total crime index covered by patrol routes** while respecting operational constraints.
-
-This problem is **NP-complete**, meaning that exact mathematical models become impractical for large cities. For this reason, heuristic and metaheuristic approaches are required.
+### O que foi alterado e qual a contribuição?
+1. **Mecanismo de Vizinhança Múltipla (VNS):** Em vez de aplicar uma única rotina de busca local estática como no trabalho original, o algoritmo agora alterna sistematicamente entre diferentes estruturas de vizinhança ($N_k, k = 1, \dots, k_{max}$):
+   * **$N_1$ (Swap):** Troca a ordem de dois pontos de patrulha na rota.
+   * **$N_2$ (Relocate / Reinsertion):** Realoca um setor crítico de um ponto para outro da rota da viatura.
+   * **$N_3$ (2-opt Inter-segment):** Inverte uma subsequência de nós para desfazer cruzamentos de rotas.
+2. **Estratégia de Escape de Mínimos Locais (*Shake*):** Quando a busca local esgota a exploração de uma vizinhança sem ganho de aptidão, o operador de perturbação altera estocasticamente a solução atual com base no parâmetro $k$, permitindo explorar novas regiões promissoras do espaço de busca sem perder a viabilidade da rota.
 
 ---
 
-## Solution Approach
+## Estrutura do Repositório
 
-This project focuses on heuristic-based solutions inspired by the **PROTECTOR algorithm**, which combines:
+- `model.py`: Definição do grafo viário, matriz de custos/distâncias e cálculo da função objetivo (cobertura de criticidade vs. custo de deslocamento).
+- `grasp_vns.py`: Implementação do algoritmo híbrido (Construção Gulosa-Aleatória + VNS com múltiplas estruturas de vizinhança).
+- `main.py`: Script de execução com instâncias de exemplo e logs de convergência.
 
-- **GRASP (Greedy Randomized Adaptive Search Procedure)**
-- **Variable Neighborhood Descent (VND)** local search
+## Como Executar
 
-The algorithm works in two main phases.
+Certifique-se de ter o Python instalado!
 
-### 1. Construction Phase
+Para facilitar a execução de todo o projeto (Rust + Python), utilize o Makefile incluído na raiz do repositório.
 
-An initial patrol solution is built using greedy randomized rules:
+1. Configuração Inicial
+Instala as dependências do Python e verifica o ambiente Rust/Cargo:
 
-- Identify high-crime vertices
-- Generate patrol routes that prioritize crime hotspots
-- Create two types of routes:
-  - **Inter-zone routes**: may cross multiple zones
-  - **Intra-zone routes**: restricted to a specific zone
-- Optionally include **mandatory edges** that must be patrolled
+```Bash
+make setup
+```
 
-### 2. Local Search Phase
+2. Compilar o Projeto
+Compila o motor de otimização em Rust no modo de liberação (release) para máxima performance:
 
-The initial solution is improved using neighborhood search strategies:
+```Bash
+make build
+```
 
-- **Path Switch** – replace a route segment with a higher crime coverage path
-- **Loop Insertion** – extend a route to include additional high-crime areas
-- **Guard Shift** – relocate fixed officers to vertices with higher uncovered crime index
+3. Execução das Heurísticas para Coleta de Métricas
+Você pode executar cada abordagem isoladamente ou rodar todas em sequência para gerar os dados comparativos:
 
-The best solution found across iterations is returned as the final patrol plan.
+- Rodar apenas o GRASP Tradicional:
 
----
+```Bash
+make run-grasp
+```
 
-## Data Model
+- Rodar apenas o DM-Grasp (com Mineração de Dados):
 
-The system represents the city using a **crime graph**:
+```Bash
+make run-dm
+```
 
-Gc = (V, E, Q)
+- Rodar apenas a nova abordagem VNS / VND híbrida:
 
-Where:
+```Bash
+make run-vns
+```
 
-- **V** = vertices (street connections)
-- **E** = edges (street segments)
-- **Q** = partition of vertices into patrol zones
+- Rodar o algoritmo guloso
 
-Each edge contains:
+```Bash
+make run-greedy
+```
 
-- crime index
-- segment length
-- direction (one-way or two-way)
+- Rodar todas as três heurísticas em sequência de uma só vez:
 
-Additional resources modeled in the problem include:
+```Bash
+make run-all
+````
 
-- **Drivable units** – police vehicles assigned to patrol routes
-- **Non-drivable units** – officers assigned to fixed positions
-- **Route constraints** – maximum patrol length and mandatory coverage points
+1. Executar o Script Auxiliar em Python
 
----
+```Bash
+make run-py
+````
 
-## Dataset
+5. Limpar Arquivos Temporários
+Remove artefatos de compilação, caches e logs gerados:
 
-Experiments described in the reference work use the **PolRoute-DS dataset**, which contains:
+```Bash
+make clean
+```
 
-- ~7.2M crime records
-- street segments and intersections
-- geographic zones
-- timestamps and crime categories
-
-Crime categories include:
-
-- mobile phone theft
-- robbery
-- vehicle theft
-- vehicle robbery
-
-These records are used to compute **crime indexes for street segments**.
-
----
-
-## How to Use
-
-Example CLI usage (conceptual):
-
-```bash
-cargo run --release -- \
-  --input crime_graph.json \
-  --vehicles 4 \
-  --max-distance 5000 \
-  --zones 3
-
-src/
- ├─ graph/        # Crime graph data structures
- ├─ routing/      # Route construction algorithms
- ├─ heuristics/   # GRASP and local search procedures
- ├─ datasets/     # Dataset loaders and preprocessing
- └─ cli/          # Command-line interface
+O sistema conta com um módulo de rastreamento de desempenho que registra o histórico de iterações, os melhores custos de solução encontrados e o tempo de execução decorrido, salvando-os em um arquivo `convergence_log.csv` para avaliação e geração de gráficos no seu relatório.

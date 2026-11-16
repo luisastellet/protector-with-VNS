@@ -35,6 +35,7 @@ pub enum Metaheuristic {
     Grasp,
     DmGrasp,
     Greedy,
+    Vns, 
 }
 
 impl FromStr for Metaheuristic {
@@ -45,6 +46,7 @@ impl FromStr for Metaheuristic {
             "grasp" => Metaheuristic::Grasp,
             "dm-grasp" => Metaheuristic::DmGrasp,
             "one-greedy-construction" => Metaheuristic::Greedy,
+            "vns" => Metaheuristic::Vns,
             _ => return Err("failed to parse metaheuristic"),
         })
     }
@@ -56,6 +58,7 @@ impl Display for Metaheuristic {
             Metaheuristic::Grasp => f.write_str("grasp"),
             Metaheuristic::DmGrasp => f.write_str("dm-grasp"),
             Metaheuristic::Greedy => f.write_str("one-greedy-construction"),
+            Metaheuristic::Vns => f.write_str("vns"),
         }
     }
 }
@@ -74,7 +77,6 @@ impl<'a> Run<'a> {
         );
 
         let mut best = NotNan::<f64>::default();
-        // Preparing the environment for intermediate solutions export.
         let _ = std::fs::remove_dir_all(&opts.intermediates_folder);
         let _ = std::fs::remove_dir_all("tmp");
 
@@ -103,6 +105,22 @@ impl<'a> Run<'a> {
                     &mut iter_criterion
                 };
 
+                let mut historico_convergencia: Vec<(usize, f64, Duration)> = Vec::new();
+                let mut iter_contador = 0;
+
+                let mut export_intermediate = |solution: &Solution| {
+                    if solution.score() > best {
+                        best = solution.score();
+                        export(solution, &opts.intermediates_folder, best)?;
+                    }
+                    
+                    let elapsed = start.elapsed();
+                    historico_convergencia.push((iter_contador, *solution.score().as_ref(), elapsed));
+                    iter_contador += 1;
+
+                    Some(())
+                };
+
                 let solution = match opts.metaheuristic {
                     Metaheuristic::Grasp => metaheuristic::multistart_grasp(
                         instance,
@@ -124,9 +142,18 @@ impl<'a> Run<'a> {
                     Metaheuristic::Greedy => {
                         metaheuristic::one_greedy_construction(instance, &opts.grasp, &mut rng)
                     }
+                    Metaheuristic::Vns => metaheuristic::vns_heuristic(
+                        instance,
+                        &opts.grasp,
+                        stop_criterion,
+                        &mut rng,
+                        &mut export_intermediate,
+                    ),
                 }?;
 
                 let duration = start.elapsed();
+
+                let _ = salvar_log_convergencia(&historico_convergencia, &opts.metaheuristic.to_string(), exec_number);
 
                 log::info!(
                     "Execution {} done. Time: {:?}, Score: {:.2}",
@@ -138,6 +165,15 @@ impl<'a> Run<'a> {
                 Some((exec_number, solution, duration))
             })
             .collect::<Vec<_>>();
+        
+        let _ = fs::create_dir_all("results");
+        let resumo_path = format!("results/resumo_{}.csv", opts.metaheuristic);
+        let mut resumo_file = File::create(&resumo_path)?;
+        writeln!(resumo_file, "execucao,melhor_score,tempo_segundo")?;
+        for (exec_num, sol, dur) in &solutions {
+            writeln!(resumo_file, "{},{},{:.4}", exec_num, sol.score(), dur.as_secs_f64())?;
+        }
+        println!("Resumo salvo com sucesso em: {}", resumo_path);
 
         if solutions.is_empty() {
             return Err(anyhow!("Couldn't build any solution"));
@@ -146,18 +182,40 @@ impl<'a> Run<'a> {
         Ok(Self { solutions, opts })
     }
 
-    /// Get a reference to the run's solutions.
     pub fn solutions(&self) -> &[(u32, Solution<'a>, Duration)] {
         &self.solutions
     }
 
-    /// Get a reference to the run's opts.
     pub fn opts(&self) -> &RunOpts {
         &self.opts
     }
 }
 
-// Exporting intermediate solution
+use std::fs::File;
+use std::io::Write;
+
+fn salvar_log_convergencia(
+    historico: &[(usize, f64, Duration)],
+    metaheuristic_name: &str,
+    exec_number: u32,
+) -> std::io::Result<()> {
+    let dir_path = format!("results/{}", metaheuristic_name);
+    fs::create_dir_all(&dir_path)?;
+
+    let arquivo_path = format!("{}/exec_{}.csv", dir_path, exec_number);
+    println!("Salvando log em: {:?}", std::path::Path::new(&arquivo_path).canonicalize().unwrap_or_else(|_| PathBuf::from(&arquivo_path)));
+
+    let mut file = File::create(&arquivo_path)?;
+    writeln!(file, "iteracao,melhor_score,tempo_segundos")?;
+
+    let mut tempo_acumulado = 0.0;
+    for (it, score, duration) in historico {
+        tempo_acumulado += duration.as_secs_f64();
+        writeln!(file, "{},{},{:.4}", it, score, tempo_acumulado)?;
+    }
+    Ok(())
+}
+
 fn export(solution: &Solution, folder: &Path, best: NotNan<f64>) -> Option<()> {
     let _ = fs::create_dir(folder);
     let file_name = format!("{:.2}.txt", best.as_ref());

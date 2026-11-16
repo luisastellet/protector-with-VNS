@@ -56,6 +56,80 @@ pub fn multistart_grasp<'a>(
     best
 }
 
+
+pub fn vns_heuristic<'a>(
+    instance: &'a Instance,
+    params: &Params,
+    stop_criterion: &mut dyn StopCriterion,
+    rng: &mut impl Rng,
+    mut after_local_search: impl FnMut(&Solution) -> Option<()>,
+) -> Option<Solution<'a>> {
+    let mut current = Solution::new(instance, &params.construction, rng)?;
+
+    local_search(&mut current, &params.local_search, rng);
+
+    after_local_search(&current)?;
+
+    let mut best = current.clone();
+
+    let k_max = 3;
+    let mut iteration = 0;
+
+    while !stop_criterion.should_stop() {
+        let mut k = 1;
+
+        while k <= k_max && !stop_criterion.should_stop() {
+            iteration += 1;
+
+            let mut candidate = current.clone();
+
+            local_search::shake(
+                &mut candidate,
+                &params.local_search,
+                k,
+                rng,
+            );
+
+            local_search(
+                &mut candidate,
+                &params.local_search,
+                rng,
+            );
+
+            debug!(
+                "VNS iteration {} | k = {} | candidate score = {}",
+                iteration,
+                k,
+                candidate.score()
+            );
+
+            after_local_search(&candidate)?;
+
+            if candidate.score() > current.score() {
+                current = candidate;
+
+                if current.score() > best.score() {
+                    best = current.clone();
+
+                    debug!(
+                        "New best solution found: {}",
+                        best.score()
+                    );
+                }
+
+                k = 1;
+            } else {
+                k += 1;
+            }
+
+            stop_criterion.update();
+        }
+    }
+
+    Some(best)
+}
+
+
 impl Score for Solution<'_> {
     type Value = NotNan<f64>;
 
@@ -64,7 +138,6 @@ impl Score for Solution<'_> {
     }
 }
 
-// just comparing the score is good enough for us now
 impl PartialEq for Solution<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.score() == other.score()
@@ -158,4 +231,58 @@ pub fn one_greedy_construction<'a>(
     rng: &mut impl Rng,
 ) -> Option<Solution<'a>> {
     Solution::new(instance, &params.construction, rng)
+}
+
+pub fn shake(
+    solution: &mut Solution<'_>,
+    params: &Params,
+    k: usize,
+    rng: &mut impl Rng,
+) {
+    let no_restriction = |_, _| false;
+
+    let mut inserted = 0;
+    let max_attempts = k * 10;
+
+    for _ in 0..max_attempts {
+        if inserted >= k {
+            break;
+        }
+
+        let mut routes = Vec::new();
+
+        routes.extend(
+            solution
+                .zones
+                .iter_mut()
+                .flat_map(|(_, zone_routes)| zone_routes.iter_mut()),
+        );
+
+        routes.extend(solution.globals.iter_mut());
+
+        routes.extend(
+            solution
+                .vips
+                .iter_mut()
+                .map(|(_, route)| route),
+        );
+
+        if routes.is_empty() {
+            break;
+        }
+
+        let index = rng.gen_range(0..routes.len());
+
+        if add_loop(
+            &mut *routes[index],
+            &mut solution.coverage,
+            &no_restriction,
+            params,
+            rng,
+        ) {
+            inserted += 1;
+        }
+    }
+
+    solution.refresh_score();
 }

@@ -42,13 +42,13 @@ pub struct Params {
 
 #[derive(Debug, Clone)]
 pub struct Solution<'a> {
-    vips: Vec<(&'a InsertedVip, Route<'a>)>,
-    zones: Vec<(Zone, Vec<Route<'a>>)>,
-    globals: Vec<Route<'a>>,
+    pub(crate) vips: Vec<(&'a InsertedVip, Route<'a>)>,
+    pub(crate) zones: Vec<(Zone, Vec<Route<'a>>)>,
+    pub(crate) globals: Vec<Route<'a>>,
     fixed_units: Vec<NodeIndex>,
     graph: &'a Graph,
     score: NotNan<f64>,
-    coverage: Coverage<EdgeIndex>,
+    pub(crate) coverage: Coverage<EdgeIndex>,
     pub instance: &'a Instance,
 }
 

@@ -10,7 +10,7 @@ use rand::Rng;
 use crate::{Percentage, Solution, graph::vertex::Vertex};
 
 // Local Search moves
-use loop_move::add_loop;
+pub(crate) use loop_move::add_loop;
 use reposition_unit::reposition_unit;
 use section_moves::expand_route;
 

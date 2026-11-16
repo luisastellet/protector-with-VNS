@@ -1,6 +1,7 @@
 use log::debug;
 use ordered_float::NotNan;
 use rand::Rng;
+use crate::local_search::add_loop;
 
 use crate::{
     Instance, Percentage, Solution,
@@ -83,7 +84,7 @@ pub fn vns_heuristic<'a>(
 
             let mut candidate = current.clone();
 
-            local_search::shake(
+            shake(
                 &mut candidate,
                 &params.local_search,
                 k,
@@ -235,10 +236,10 @@ pub fn one_greedy_construction<'a>(
 
 pub fn shake(
     solution: &mut Solution<'_>,
-    params: &Params,
+    params: &local_search::Params,
     k: usize,
     rng: &mut impl Rng,
-) {
+){
     let no_restriction = |_, _| false;
 
     let mut inserted = 0;

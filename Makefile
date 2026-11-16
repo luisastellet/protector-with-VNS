@@ -13,24 +13,21 @@ build:
 	cargo build --release
 	@echo "✔ Compilação concluída!"
 
-# Execuções individuais
 run-greedy:
 	@echo "==> Executando Heurística Gulosa (Greedy)..."
-	cargo run --release -- instances/sacoma-3745/graph --metaheuristic one-greedy-construction --executions 5 --max-section-size 0.3 --iterations 1
+	cargo run --release -- instances/sacoma-3745/graph --metaheuristic one-greedy-construction --executions 10 --max-section-size 0.3719 --iterations 1
 
 run-grasp:
-	@echo "==> Executando GRASP puro..."
-	cargo run --release -- instances/sacoma-3745/graph --metaheuristic grasp --iterations 200 --executions 5
+	@echo "==> Executando GRASP puro (Parâmetros originais: 100 iterações, 10 execuções)..."
+	cargo run --release -- instances/sacoma-3745/graph --metaheuristic grasp --iterations 100 --executions 10 --alpha 0.1436 --max-section-size 0.3719
 
 run-vns:
-	@echo "==> Executando VNS / VND híbrido (Sua Contribuição com mais iterações)..."
-	cargo run --release -- instances/sacoma-3745/graph --metaheuristic vns --iterations 200 --executions 5 --max-section-size 0.3
+	@echo "==> Executando VNS / VND híbrido com os parâmetros originais do artigo..."
+	cargo run --release -- instances/sacoma-3745/graph --metaheuristic vns --iterations 100 --executions 10 --alpha 0.1436 --max-section-size 0.3719
 
-# Executa todos os experimentos válidos em sequência
 run-all: run-greedy run-grasp run-vns
 	@echo "✔ Todos os experimentos foram concluídos!"
 
-# Compara os resultados limpos
 compare:
 	@echo "==> Analisando e comparando os resultados..."
 	python3 compare_results.py

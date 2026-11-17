@@ -101,3 +101,31 @@ Pré-requisitos: **Rust/Cargo** e **Python 3**.
 ## Coleta de métricas
 
 O módulo de rastreamento registra o histórico de iterações, o melhor custo encontrado e o tempo decorrido, salvando tudo em `convergence_log.csv`. Esse arquivo serve de base para os gráficos de convergência do relatório.
+
+## Saídas dos experimentos
+
+Cada execução de `vns`, `grasp`, `dm-grasp` ou `one-greedy-construction` grava os arquivos abaixo em `results/`.
+
+### `results/resumo_<heurística>.csv`
+
+Uma linha por execução, com a solução final:
+
+| coluna | descrição |
+|---|---|
+| `execucao` | número da execução (a semente é `base_seed + execucao`) |
+| `melhor_score` | score da solução final da execução |
+| `tempo_segundos` | tempo total da execução, em segundos |
+| `violacoes_zona` | número de arestas de rotas de zona que saem da zona (deve ser `0`) |
+
+### `results/<heurística>/exec_N.csv`
+
+Log de convergência da execução `N`. Uma linha por solução avaliada após a busca local:
+
+| coluna | descrição |
+|---|---|
+| `iteracao` | contador de soluções avaliadas (a `0` é a solução inicial) |
+| `score_candidata` | score da solução avaliada naquela iteração |
+| `melhor_score` | melhor score encontrado **nesta execução** até aquela iteração |
+| `tempo_segundos` | tempo decorrido desde o início da execução, em segundos |
+
+Use `melhor_score` para curvas de convergência e `score_candidata` para ver a oscilação da busca. Na `one-greedy-construction` o `exec_N.csv` sai só com o cabeçalho, porque ela não tem busca iterativa.

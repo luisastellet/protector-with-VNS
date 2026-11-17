@@ -1,7 +1,6 @@
 use log::debug;
 use ordered_float::NotNan;
 use rand::Rng;
-use crate::local_search::add_loop;
 
 use crate::{
     Instance, Percentage, Solution,
@@ -84,7 +83,7 @@ pub fn vns_heuristic<'a>(
 
             let mut candidate = current.clone();
 
-            shake(
+            local_search::shake(
                 &mut candidate,
                 &params.local_search,
                 k,
@@ -232,58 +231,4 @@ pub fn one_greedy_construction<'a>(
     rng: &mut impl Rng,
 ) -> Option<Solution<'a>> {
     Solution::new(instance, &params.construction, rng)
-}
-
-pub fn shake(
-    solution: &mut Solution<'_>,
-    params: &local_search::Params,
-    k: usize,
-    rng: &mut impl Rng,
-){
-    let no_restriction = |_, _| false;
-
-    let mut inserted = 0;
-    let max_attempts = k * 10;
-
-    for _ in 0..max_attempts {
-        if inserted >= k {
-            break;
-        }
-
-        let mut routes = Vec::new();
-
-        routes.extend(
-            solution
-                .zones
-                .iter_mut()
-                .flat_map(|(_, zone_routes)| zone_routes.iter_mut()),
-        );
-
-        routes.extend(solution.globals.iter_mut());
-
-        routes.extend(
-            solution
-                .vips
-                .iter_mut()
-                .map(|(_, route)| route),
-        );
-
-        if routes.is_empty() {
-            break;
-        }
-
-        let index = rng.gen_range(0..routes.len());
-
-        if add_loop(
-            &mut *routes[index],
-            &mut solution.coverage,
-            &no_restriction,
-            params,
-            rng,
-        ) {
-            inserted += 1;
-        }
-    }
-
-    solution.refresh_score();
 }
